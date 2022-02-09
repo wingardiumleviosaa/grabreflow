@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+<head>
+  <title>Grab Reflow History</title>
+</head>
+<body>
+  <div class="margin-body">
+        <div class="row">
+          {{range .images}}
+          <div class="image">
+                <img src="data:image/png;base64,{{.}}"/>
+          </div>
+          {{end}}
+        </div>
+      </div>
+</body>
+</html>
