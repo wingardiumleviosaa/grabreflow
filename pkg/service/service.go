@@ -103,7 +103,7 @@ func (s *Service) GrabReflow(c *gin.Context) {
 			}
 			// new a webdriver's instance
 			service, err := selenium.NewChromeDriverService("/usr/bin/chromedriver", 9515, opts...)
-			// service, err := selenium.NewChromeDriverService("./chromedriver", 9515, opts...)
+			// service, err := selenium.NewChromeDriverService("/home/nexdata/chromedriver", 9515, opts...)
 			if err != nil {
 				log.Error("Error starting the ChromeDriver server:", err)
 			}
@@ -167,72 +167,79 @@ func (s *Service) GrabReflow(c *gin.Context) {
 			time.Sleep(time.Duration(3) * time.Second)
 
 			html_parse, _ := wd.PageSource()
+			// fmt.Println(html_parse)
 			doc := soup.HTMLParse(html_parse)
-			table := doc.Find("div", "class", "react-bs-container-body").FindAll("tr")
+			// fmt.Println(doc)
+			if html_parse != "" {
+				table := doc.Find("div", "class", "react-bs-container-body").FindAll("tr")
+				for i := 0; i < len(table); i++ {
+					ele := "/html/body/div/div/div/div/section[2]/div[2]/div/div/div[2]/div[2]/div/div/div/div[2]/div[2]/table/tbody/tr[" + strconv.Itoa(i+1) + "]/td[1]"
+					enter_modal, _ := wd.FindElement(selenium.ByXPATH, ele)
+					enter_modal.Click()
+					pop_up, _ := wd.WindowHandles()
+					wd.SwitchWindow(pop_up[0])
+					//fmt.Println(pop_up)
+					time.Sleep(time.Duration(1) * time.Second)
+					scrnshot, _ := wd.Screenshot()
+					ioutil.WriteFile("test"+strconv.Itoa(i+1)+".png", scrnshot, 0666)
+					modal, _ := wd.FindElement(selenium.ByClassName, "modal-body")
+					loc, _ := modal.Location()
+					sz, _ := modal.Size()
+					// fmt.Println(loc)
+					// fmt.Println(sz)
+					file, _ := os.Open("./test" + strconv.Itoa(i+1) + ".png")
+					defer file.Close()
+					log.Info(file)
+					img, _ := png.Decode(file)
+					sub_image := img.(interface {
+						SubImage(r image.Rectangle) image.Image
+					}).SubImage(image.Rect(loc.X, loc.Y, loc.X+sz.Width, loc.Y+sz.Height))
+					file, _ = os.Create("./crop" + strconv.Itoa(i+1) + ".png")
+					png.Encode(file, sub_image)
 
-			for i := 0; i < len(table); i++ {
-				ele := "/html/body/div/div/div/div/section[2]/div[2]/div/div/div[2]/div[2]/div/div/div/div[2]/div[2]/table/tbody/tr[" + strconv.Itoa(i+1) + "]/td[1]"
-				enter_modal, _ := wd.FindElement(selenium.ByXPATH, ele)
-				enter_modal.Click()
-				pop_up, _ := wd.WindowHandles()
-				wd.SwitchWindow(pop_up[0])
-				//fmt.Println(pop_up)
-				time.Sleep(time.Duration(1) * time.Second)
-				scrnshot, _ := wd.Screenshot()
-				ioutil.WriteFile("test"+strconv.Itoa(i+1)+".png", scrnshot, 0666)
-				modal, _ := wd.FindElement(selenium.ByClassName, "modal-body")
-				loc, _ := modal.Location()
-				sz, _ := modal.Size()
-				// fmt.Println(loc)
-				// fmt.Println(sz)
-				file, _ := os.Open("./test" + strconv.Itoa(i+1) + ".png")
-				defer file.Close()
-				log.Info(file)
-				img, _ := png.Decode(file)
-				sub_image := img.(interface {
-					SubImage(r image.Rectangle) image.Image
-				}).SubImage(image.Rect(loc.X, loc.Y, loc.X+sz.Width, loc.Y+sz.Height))
-				file, _ = os.Create("./crop" + strconv.Itoa(i+1) + ".png")
-				png.Encode(file, sub_image)
+					time.Sleep(time.Duration(5) * time.Second)
 
-				time.Sleep(time.Duration(5) * time.Second)
+					// pdf_button, _ := wd.FindElement(selenium.ByXPATH, "/html/body/div[2]/div/div[2]/div/div/div[3]/div/div[2]/button[2]")
+					// args := []interface{}{pdf_button}
+					// wd.ExecuteScript("arguments[0].click();", args)
+					// time.Sleep(time.Duration(5) * time.Second)
 
-				// pdf_button, _ := wd.FindElement(selenium.ByXPATH, "/html/body/div[2]/div/div[2]/div/div/div[3]/div/div[2]/button[2]")
-				// args := []interface{}{pdf_button}
-				// wd.ExecuteScript("arguments[0].click();", args)
-				// time.Sleep(time.Duration(5) * time.Second)
+					ok_button, _ := wd.FindElement(selenium.ByXPATH, "/html/body/div[2]/div/div[2]/div/div/div[3]/div/div[2]/button[4]")
+					args = []interface{}{ok_button}
+					wd.ExecuteScript("arguments[0].click();", args)
+					time.Sleep(time.Duration(2) * time.Second)
+				}
 
-				ok_button, _ := wd.FindElement(selenium.ByXPATH, "/html/body/div[2]/div/div[2]/div/div/div[3]/div/div[2]/button[4]")
-				args = []interface{}{ok_button}
-				wd.ExecuteScript("arguments[0].click();", args)
-				time.Sleep(time.Duration(2) * time.Second)
+				////// 5. Get the result to the gin context ////////
+
+				var images []string
+				for i := 0; i < len(table); i++ {
+					imgFile, _ := os.Open("./crop" + strconv.Itoa(i+1) + ".png")
+					defer imgFile.Close()
+
+					// create a new buffer base on file size
+					fInfo, _ := imgFile.Stat()
+					var size int64 = fInfo.Size()
+					buf := make([]byte, size)
+					// read file content into buffer
+					fReader := bufio.NewReader(imgFile)
+					fReader.Read(buf)
+					imgBase64Str := base64.StdEncoding.EncodeToString(buf)
+
+					images = append(images, imgBase64Str)
+				}
+
+				c.HTML(http.StatusOK, "img.html", gin.H{
+					"images": images,
+				})
+			} else {
+				log.Error("Record Not Found:" + strconv.Itoa(resp.StatusCode))
+				c.JSON(http.StatusNotFound, gin.H{"error": "Record Not Found, the serial number not exists in Thermal Server"})
+				c.Abort()
 			}
-
 			wd.Quit()
 			service.Stop()
 
-			////// 5. Get the result to the gin context ////////
-
-			var images []string
-			for i := 0; i < len(table); i++ {
-				imgFile, _ := os.Open("./crop" + strconv.Itoa(i+1) + ".png")
-				defer imgFile.Close()
-
-				// create a new buffer base on file size
-				fInfo, _ := imgFile.Stat()
-				var size int64 = fInfo.Size()
-				buf := make([]byte, size)
-				// read file content into buffer
-				fReader := bufio.NewReader(imgFile)
-				fReader.Read(buf)
-				imgBase64Str := base64.StdEncoding.EncodeToString(buf)
-
-				images = append(images, imgBase64Str)
-			}
-
-			c.HTML(http.StatusOK, "img.html", gin.H{
-				"images": images,
-			})
 		} else { // status code != 200
 			log.Error("Record Not Found:" + strconv.Itoa(resp.StatusCode))
 			c.JSON(http.StatusNotFound, gin.H{"error": "Record Not Found, the serial number doesn't exist"})

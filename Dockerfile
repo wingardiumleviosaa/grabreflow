@@ -6,7 +6,7 @@ RUN CGO_ENABLED=0 go build -o /grabreflow -ldflags="-s -w"
 # FROM selenium/standalone-chrome
 FROM alpine:edge
 WORKDIR /
-COPY ./config /config
+# COPY ./config /config
 COPY ./view /view
 COPY --from=build /grabreflow /grabreflow
 # COPY ./chromedriver /chromedriver
